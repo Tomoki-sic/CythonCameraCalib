@@ -5,6 +5,7 @@ import os
 import pickle
 
 from dll import setting
+from dll import cameraCalibration as cal
 
 def make_sharp_kernel(k: int):
   return np.array([
@@ -13,11 +14,26 @@ def make_sharp_kernel(k: int):
     [-k / 9, -k / 9, -k / 9]
   ], np.float32)
 
-CALIB_FLAG = True
-CAMERA = "STSD2_002"
-OUTPUT = "./"+CAMERA+"/circleGrid6/calib2/"
-SHAPE = (5,7)
-DISRANCE_OF_GRID = 34
+def transrated_points(points):
+  dst = np.array([[points[0]]])
+  points.pop(0)
+  for point in points:
+    dst = np.append(dst,[[point]],axis=0)
+  return dst
+
+
+MANUAL_FLAG = False
+CAMERA = "STSD3_002"
+OUTPUT = "./"+CAMERA+"/calib_zhang2/"
+INPUT = "./"+CAMERA+"/"
+
+SHAPE = (7,8)
+DISRANCE_OF_GRID =  16
+
+threshold = 80
+rect_min=3
+rect_max=200
+F = 0.5
 
 def writePickle(filename, data):
     with open(filename,'wb') as f:
@@ -43,29 +59,42 @@ for fname in images:
     i+=1
     img = cv2.imread(fname)
     kernel = make_sharp_kernel(1)
-    img = cv2.filter2D(img, -1, kernel).astype("uint8")
-    gray = cv2.cvtColor(img,cv2.COLOR_BGR2HSV)[:,:,2]
-    #gray[gray>60] = 255
+    #img = cv2.filter2D(img, -1, kernel).astype("uint8")
+    #gray = cv2.cvtColor(img,cv2.COLOR_BGR2HSV)[:,:,2]
+    gray = img[:,:,1]
+    #gray[gray<60] = 0
+    #gray[gray>=60] = 255
+    #gray = cv2.medianBlur(gray, ksize=3)
     cv2.imwrite(OUTPUT+'img'+str(i)+'.png',gray)
     # Find the chess board corners
-    #ret, corners = cv2.findCirclesGrid(gray, (Board_y,Board_x),cv2.CALIB_CB_SYMMETRIC_GRID)
-    ret, corners = cv2.findChessboardCorners(gray,(Board_y,Board_x))
+    if MANUAL_FLAG:
+      ret = True
+      points = cal.pickUpDistortedPoints(img,threshold,F,rect_min,rect_max)
+      corners = transrated_points(points)
+      # If found, add object points, image points (after refining them)
+      if ret == True:
+          objpoints.append(objp)
+          corners2 = corners
+          imgpoints.append(corners2)
+    #ret, corners = cv2.findChessboardCorners(gray,(Board_y,Board_x))
+    else:
+      #ret, corners = cv2.findCirclesGrid(gray, (Board_y,Board_x),cv2.CALIB_CB_SYMMETRIC_GRID)
+      ret, corners = cv2.findChessboardCorners(gray,(Board_y,Board_x))
+      # If found, add object points, image points (after refining them)
+      if ret == True:
+          print(fname)
+          objpoints.append(objp)
+          corners2 = cv2.cornerSubPix(gray,corners,(11,11),(-1,-1),criteria)
+          imgpoints.append(corners2)
+          # Draw and display the corners
+          img = cv2.drawChessboardCorners(img, (Board_y,Board_x), corners2,ret)
+          cv2.imwrite(OUTPUT+str(i)+".png",img)
+    
 
-    # If found, add object points, image points (after refining them)
-    if ret == True:
-        print(fname)
-        objpoints.append(objp)
-        
-        corners2 = cv2.cornerSubPix(gray,corners,(11,11),(-1,-1),criteria)
-        imgpoints.append(corners2)
-
-        # Draw and display the corners
-        img = cv2.drawChessboardCorners(img, (Board_y,Board_x), corners2,ret)
-        cv2.imwrite(OUTPUT+str(i)+".png",img)
     
 #os.chdir("calib")
-ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(objpoints, imgpoints, gray.shape[::-1],None,None,flags=cv2.CALIB_ZERO_TANGENT_DIST | cv2.CALIB_FIX_K1|cv2.CALIB_FIX_K2 | cv2.CALIB_FIX_K3)
-#ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(objpoints, imgpoints, gray.shape[::-1],None,None)
+#ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(objpoints, imgpoints, gray.shape[::-1],None,None,flags=cv2.CALIB_ZERO_TANGENT_DIST | cv2.CALIB_FIX_K1|cv2.CALIB_FIX_K2 | cv2.CALIB_FIX_K3)
+ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(objpoints, imgpoints, gray.shape[::-1],None,None)
 
 print("カメラ行列:")
 print(mtx)
@@ -76,9 +105,9 @@ print(dist)
 writePickle(OUTPUT+"K.pkl",mtx)
 writePickle(OUTPUT+"dist.pkl",dist)
 
-img = cv2.imread(OUTPUT+'test.png')
+img = cv2.imread(OUTPUT+'cal01_undist.bmp')
 h,  w = img.shape[:2]
-newcameramtx, roi=cv2.getOptimalNewCameraMatrix(mtx,dist,(w,h),1,(w*4,h*4))
+newcameramtx, roi=cv2.getOptimalNewCameraMatrix(mtx,dist,(w,h),1,(w,h))
 # undistort
 dst = cv2.undistort(img, mtx, dist, None, newcameramtx)
 # crop the image

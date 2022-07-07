@@ -5,8 +5,8 @@ import numpy as np
 from dll import flyCapture
 from dll import cameraCalibration as cal
 
-CAMERA = "STSD2_002"
-OUTPUT = "./"+CAMERA+"/cal9/"
+CAMERA = "STSD3_002"
+OUTPUT = "./"+CAMERA+"/calib_zhang2/"
 IMAGE_WIDTH = 2080
 IMAGE_HEIGHT = 1552
 
@@ -23,7 +23,7 @@ cap.startCapture()
 while True:
     k = cv2.waitKey(1) & 0xFF
     reg, img = cap.captureImage()
-    img2  = cv2.circle(img.copy(), (1040,776),500,(255,255,255),thickness=0)
+    img2  = cv2.circle(img.copy(), (1040,776),300,(255,255,255),thickness=0)
     cv2.imshow("capture",img2)
     if k == 27:
         cap.stopCapture()
